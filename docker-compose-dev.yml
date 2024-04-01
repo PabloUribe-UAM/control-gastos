@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  app:
+    container_name: control-gastos
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
