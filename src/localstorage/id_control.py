@@ -1,0 +1,1 @@
+idCategory = 0
