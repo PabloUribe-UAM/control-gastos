@@ -1,4 +1,4 @@
-from ..models.Income import Income
+from ..schemas.Income import Income
 from typing import List
 
 

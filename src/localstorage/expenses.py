@@ -1,4 +1,4 @@
-from ..models.Expense import Expense
+from ..schemas.Expense import Expense
 from typing import List
 
 

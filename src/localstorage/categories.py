@@ -1,4 +1,4 @@
-from ..models.Category import Category
+from ..schemas.Category import Category
 from typing import List
 
 

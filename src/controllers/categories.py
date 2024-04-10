@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, Body, Path, Query
 from fastapi.responses import JSONResponse
 from ..localstorage.categories import categories
-from ..models.Category import Category
+from ..schemas.Category import Category
 import re as regex
 from ..localstorage.id_control import idCategory
 

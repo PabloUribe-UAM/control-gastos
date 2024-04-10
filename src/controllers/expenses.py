@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Path, Query
 from fastapi.responses import JSONResponse
 from ..localstorage.expenses import expenses
 from ..localstorage.categories import categories
-from ..models.Expense import Expense
+from ..schemas.Expense import Expense
 
 router = APIRouter(prefix="/expenses")
 

@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Body, Path, Query
 from fastapi.responses import JSONResponse
 from ..localstorage.users import users
-from ..models.User import User
+from ..schemas.User import User
 import re as regex
 
 
