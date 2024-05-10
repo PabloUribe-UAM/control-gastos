@@ -1,23 +1,23 @@
 from typing import List
 from fastapi import APIRouter, Body, Path, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from ..localstorage.categories import categories
-from ..schemas.Category import Category
-import re as regex
-from ..localstorage.id_control import idCategory
 
-def id_increment():
-    global idCategory
-    idCategory = idCategory + 1
-    return idCategory
+from ..models.categories import Category
+
+from ..config.database import SessionLocal
+from ..schemas.Category import CategorySchema
+import re as regex
 
 router = APIRouter(prefix="/categories")
 
 
 @router.post('', description="Create a new category")
-def create(category: Category = Body()):
-    category.id = id_increment()
-    categories.append(category.model_dump())
+def create(category: CategorySchema = Body()):
+    db = SessionLocal()
+    new_category = Category(**category.model_dump())
+    db.add(new_category)
+    db.commit()
     return JSONResponse({
         "status": 201,
         "message": "Category created",
@@ -26,76 +26,63 @@ def create(category: Category = Body()):
 
 @router.get('', description="List all categories")
 def get_all(type: str | None = Query(None)):
-    category_filter: List[Category] = []
+    db = SessionLocal()
+    category_filter = db.query(Category)
     if type is not None:
         if not regex.match(r'^((income)|(expense))$', type):
             return JSONResponse({
                 "status": 400,
                 "message": f"Not recognized value '{type}'"
             }, 400)
-        for elem in categories:
-            if elem['type'] == type:
-                category_filter.append(elem)
-        return JSONResponse(category_filter, 200)
-    return JSONResponse(categories, 200)
+        category_filter = category_filter.filter(Category.type == type)
+        return JSONResponse(jsonable_encoder(category_filter.all()), 200)
+    return JSONResponse(jsonable_encoder(category_filter.all()), 200)
 
 @router.get('/{id}', description="Get the info from a single category using the id")
 def get_by_id(id: int = Path()):
-    category: Category | None = None
-    if len(categories) == 0:
+    db = SessionLocal()
+    category = db.query(Category).filter(Category.id == id).first()
+    if category is None:
         return JSONResponse({
             "status": 404,
             "message": "Category not found"
         }, 404)
-    for c in categories:
-        if c['id'] == id:
-            category = c
-            break
-    if category == None:
-        return JSONResponse({
-            "status": 404,
-            "message": "Category not found"
-        }, 404)
-    return JSONResponse(category, 200)
+    return JSONResponse(jsonable_encoder(category), 200)
 
 @router.put('/{id}', description="Update a category")
-def update(id: int = Path(), payload: Category = Body()):
-    category: Category | None = None
-    if len(categories) == 0:
+def update(id: int = Path(), payload: CategorySchema = Body()):
+    db = SessionLocal()
+    category = db.query(Category).filter(Category.id == id).first()
+    if category is None:
         return JSONResponse({
             "status": 404,
             "message": "Category does not exist"
         }, 404)
-    for c in categories:
-        if c['id'] == id:
-            payload = payload.model_dump()
-            c["type"] = payload["type"]
-            c["name"] = payload["name"]
-            c["description"] = payload["description"]
-            category = c
-            break
-    if category == None:
-        return JSONResponse({
-            "status": 404,
-            "message": "Category does not exist"
-        }, 404)
+    category.type = payload.type
+    category.name = payload.name
+    category.description = payload.description
+    db.commit()
+    db.refresh(category)
+
     return JSONResponse({
         "status": 200,
         "message": "User updated",
-        "category": category
+        "category": jsonable_encoder(category)
     }, 200)
 
 @router.delete('/{id}', description="Remove an existent category")
 def delete(id: int = Path()):
-    for c in categories:
-        if c["id"] == id:
-            categories.remove(c)
-            return JSONResponse({
-                "status": 200,
-                "message": "Category deleted",
-                "category": c
-            }, 200)
+    db = SessionLocal()
+    category = db.query(Category).filter(Category.id == id).first()
+    if category is None:
+        return JSONResponse({
+            "status": 404,
+            "message": "Category does not exist",
+        }, 404)
+    db.delete(category)
+    db.commit()
     return JSONResponse({
-        "status": 404,
-        "message": "Category does not exist",
-    }, 404)
+        "status": 200,
+        "message": "Category deleted",
+        "category": jsonable_encoder(category)
+    }, 200)
