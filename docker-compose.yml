@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  app:
+    container_name: control-gastos
+    image: img-control-gastos:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    ports:
+      - "3501:3501"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  db:
+    image: mysql
+    container_name: control-gastos-db
+    restart: no
+    ports:
+      - "3306"
+    volumes:
+      - control_gastos_db_vol:/var/lib/mysql
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+volumes:
+  control_gastos_db_vol:
