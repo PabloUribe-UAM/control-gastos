@@ -7,7 +7,7 @@ class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, autoincrement=True)
     type = Column(Enum('income', 'expense'))
-    name = Column(String(length=20), unique=True, index=True)
+    name = Column(String(length=20))
     description = Column(String(length=250))
     user_id = Column(String(length=10), ForeignKey("users.id", ondelete='CASCADE'))
 

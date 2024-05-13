@@ -1,7 +1,11 @@
 from typing import List
-from fastapi import APIRouter, Body, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+
+from ..models.users import User
+
+from ..middlewares.has_access import has_access
 
 from ..models.categories import Category
 
@@ -12,10 +16,25 @@ import re as regex
 router = APIRouter(prefix="/categories")
 
 
-@router.post('', description="Create a new category")
+@router.post('', dependencies=[Depends(has_access)], description="Create a new category")
 def create(category: CategorySchema = Body()):
     db = SessionLocal()
+    old = db.query(Category).filter(Category.name == category.name)
+    old = old.filter(Category.user_id == category.user_id).first()
+    if old is not None:
+        return JSONResponse({
+            "status": 400,
+            "message": f"Category '{category.name}' already belongs to {category.user_id}"
+        }, 400)
+    user = db.query(User).filter(User.id == category.user_id).first()
+    if user is None:
+        return JSONResponse({
+            "status": 400,
+            "message": f"User not found"
+        }, 400)
+    del category.user_id
     new_category = Category(**category.model_dump())
+    new_category.user = user
     db.add(new_category)
     db.commit()
     return JSONResponse({
@@ -58,6 +77,13 @@ def update(id: int = Path(), payload: CategorySchema = Body()):
             "status": 404,
             "message": "Category does not exist"
         }, 404)
+    user_category = db.query(Category).filter(Category.user_id == category.user_id)
+    user_category = user_category.filter(Category.name == payload.name).first()
+    if user_category is not None and user_category.id != category.id:
+        return JSONResponse({
+            "status": 400,
+            "message": f"Category '{payload.name}' already belongs to {category.user_id}"
+        }, 400)
     category.type = payload.type
     category.name = payload.name
     category.description = payload.description

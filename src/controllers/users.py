@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from ..config.database import SessionLocal
 from ..models.users import User
 from ..schemas.User import UserSchema
+from ..utils.password import Password
 import re as regex
 
 
@@ -17,13 +18,27 @@ router = APIRouter(prefix="/users")
 @router.post('', description="Create a new user")
 def create(user: UserSchema = Body()):
     db = SessionLocal()
+    old = db.query(User).filter(User.id == user.id).first()
+    if old is not None:
+        return JSONResponse({
+            "status": 400,
+            "message": "User already exists"
+        }, 400)
+    old = db.query(User).filter(User.email == user.email).first()
+    if old is not None:
+        return JSONResponse({
+            "status": 400,
+            "message": "Email already used"
+        }, 400)
     new_user = User(**user.model_dump())
+    new_user.password = Password.hash(new_user.password)
     db.add(new_user)
     db.commit()
+    db.refresh(new_user)
     return JSONResponse({
         "status": 201,
         "message": "User created",
-        "user": user.model_dump()
+        "user": jsonable_encoder(new_user)
     }, 201)
 
 @router.get('', description="List all users")
@@ -68,6 +83,12 @@ def update(id: str = Path(), payload: UserSchema = Body()):
             "status": 404,
             "message": "User not found"
         }, 404)
+    old = db.query(User).filter(User.email == payload.email).first()
+    if old is not None and old.id != user.id:
+        return JSONResponse({
+            "status": 400,
+            "message": "Email already used"
+        }, 400)
     user.email = payload.email
     user.name = payload.name
     user.lastname = payload.lastname
