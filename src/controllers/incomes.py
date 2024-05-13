@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Body, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+
+from ..middlewares.has_access import has_access
 from ..config.database import SessionLocal
 from ..models.categories import Category
 from ..models.incomes import Income
@@ -8,8 +10,8 @@ from ..schemas.Income import IncomeSchema
 
 router = APIRouter(prefix="/incomes")
 
-@router.post('', description="Create a new income")
-def create(income: IncomeSchema = Body()):
+@router.post('', dependencies=[Depends(has_access)], description="Create a new income")
+def create(income: IncomeSchema = Body(), data = Depends(has_access)):
     db = SessionLocal()
     category = db.query(Category).filter(Category.id == income.category).first()
     if not category:
@@ -18,6 +20,8 @@ def create(income: IncomeSchema = Body()):
             "input": income.category,
             "message": f"Category not found"
         }, 400)
+    if category.user_id != data['payload']['id']:
+        raise HTTPException(status_code=403, detail="Forbidden")
     income = income.model_dump()
     del income['category']
     if category.type != "income":
@@ -78,8 +82,8 @@ def get_by_id(id: str = Path()):
         }, 404)
     return JSONResponse(jsonable_encoder(income), 200)
 
-@router.delete('/{id}', description="Remove an existent income")
-def delete(id: str = Path()):
+@router.delete('/{id}', dependencies=[Depends(has_access)], description="Remove an existent income")
+def delete(id: str = Path(), data = Depends(has_access)):
     db = SessionLocal()
     income = db.query(Income).filter(Income.id == id).first()
     if not income:
@@ -87,7 +91,9 @@ def delete(id: str = Path()):
             "status": 404,
             "message": "Income not found"
         }, 404)
-
+    category = db.query(Category).filter(Category.id == income.category_id).first()
+    if category.user_id != data['payload']['id']:
+        raise HTTPException(status_code=403, detail="Forbidden")
     db.delete(income)
     db.commit()
 

@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Body, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+
+from ..middlewares.has_access import has_access
 from ..config.database import SessionLocal
 from ..models.categories import Category
 from ..models.expenses import Expense
@@ -10,8 +12,8 @@ router = APIRouter(prefix="/expenses")
 
 
 
-@router.post('', description="Create a new expense")
-def create(expense: ExpenseSchema = Body()):
+@router.post('', dependencies=[Depends(has_access)], description="Create a new expense")
+def create(expense: ExpenseSchema = Body(), data = Depends(has_access)):
     db = SessionLocal()
     category = db.query(Category).filter(Category.id == expense.category).first()
     if not category:
@@ -20,6 +22,8 @@ def create(expense: ExpenseSchema = Body()):
             "input": expense.category,
             "message": f"Category not found"
         }, 400)
+    if category.user_id != data['payload']['id']:
+        raise HTTPException(status_code=403, detail="Forbidden")
     expense = expense.model_dump()
     del expense['category']
     if category.type != "expense":
@@ -80,8 +84,8 @@ def get_by_id(id: str = Path()):
         }, 404)
     return JSONResponse(jsonable_encoder(expense), 200)
 
-@router.delete('/{id}', description="Remove an existent expense")
-def delete(id: str = Path()):
+@router.delete('/{id}', dependencies=[Depends(has_access)], description="Remove an existent expense")
+def delete(id: str = Path(), data = Depends(has_access)):
     db = SessionLocal()
     expense = db.query(Expense).filter(Expense.id == id).first()
     if not expense:
@@ -89,7 +93,9 @@ def delete(id: str = Path()):
             "status": 404,
             "message": "Expense not found"
         }, 404)
-
+    category = db.query(Category).filter(Category.id == expense.category_id).first()
+    if category.user_id != data['payload']['id']:
+        raise HTTPException(status_code=403, detail="Forbidden")
     db.delete(expense)
     db.commit()
 

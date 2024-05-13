@@ -1,7 +1,9 @@
 from typing import List
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+
+from ..middlewares.is_owner import is_category_owner
 
 from ..models.users import User
 
@@ -17,8 +19,10 @@ router = APIRouter(prefix="/categories")
 
 
 @router.post('', dependencies=[Depends(has_access)], description="Create a new category")
-def create(category: CategorySchema = Body()):
+def create(category: CategorySchema = Body(), data = Depends(has_access)):
     db = SessionLocal()
+    if category.user_id != data['payload']['id']:
+        raise HTTPException(status_code=403, detail="Forbidden")
     old = db.query(Category).filter(Category.name == category.name)
     old = old.filter(Category.user_id == category.user_id).first()
     if old is not None:
@@ -57,7 +61,7 @@ def get_all(type: str | None = Query(None)):
         return JSONResponse(jsonable_encoder(category_filter.all()), 200)
     return JSONResponse(jsonable_encoder(category_filter.all()), 200)
 
-@router.get('/{id}', description="Get the info from a single category using the id")
+@router.get('/{id}', dependencies=[Depends(has_access), Depends(is_category_owner)], description="Get the info from a single category using the id")
 def get_by_id(id: int = Path()):
     db = SessionLocal()
     category = db.query(Category).filter(Category.id == id).first()
@@ -68,7 +72,7 @@ def get_by_id(id: int = Path()):
         }, 404)
     return JSONResponse(jsonable_encoder(category), 200)
 
-@router.put('/{id}', description="Update a category")
+@router.put('/{id}', dependencies=[Depends(has_access), Depends(is_category_owner)], description="Update a category")
 def update(id: int = Path(), payload: CategorySchema = Body()):
     db = SessionLocal()
     category = db.query(Category).filter(Category.id == id).first()
@@ -96,7 +100,7 @@ def update(id: int = Path(), payload: CategorySchema = Body()):
         "category": jsonable_encoder(category)
     }, 200)
 
-@router.delete('/{id}', description="Remove an existent category")
+@router.delete('/{id}', dependencies=[Depends(has_access), Depends(is_category_owner)], description="Remove an existent category")
 def delete(id: int = Path()):
     db = SessionLocal()
     category = db.query(Category).filter(Category.id == id).first()
