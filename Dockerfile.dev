@@ -14,4 +14,4 @@ COPY . /app
 
 EXPOSE 8000
 
-CMD [ "uvicorn", "src.main:app", "--host", "control-gastos", "--reload" ]
+CMD [ "bash", "./init/init.sh" ]

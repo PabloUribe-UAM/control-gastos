@@ -1,9 +1,13 @@
 from copy import copy
 from typing import List
 from fastapi import APIRouter, Body, Path, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from ..localstorage.users import users
-from ..models.User import User
+
+from ..config.database import SessionLocal
+from ..models.users import User
+from ..schemas.User import UserSchema
+from ..utils.password import Password
 import re as regex
 
 
@@ -12,24 +16,42 @@ router = APIRouter(prefix="/users")
 
 
 @router.post('', description="Create a new user")
-def create(user: User = Body()):
-    users.append(user.model_dump())
+def create(user: UserSchema = Body()):
+    db = SessionLocal()
+    old = db.query(User).filter(User.id == user.id).first()
+    if old is not None:
+        return JSONResponse({
+            "status": 400,
+            "message": "User already exists"
+        }, 400)
+    old = db.query(User).filter(User.email == user.email).first()
+    if old is not None:
+        return JSONResponse({
+            "status": 400,
+            "message": "Email already used"
+        }, 400)
+    new_user = User(**user.model_dump())
+    new_user.password = Password.hash(new_user.password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
     return JSONResponse({
         "status": 201,
         "message": "User created",
-        "user": user.model_dump()
+        "user": jsonable_encoder(new_user)
     }, 201)
 
 @router.get('', description="List all users")
-def get_all(status: str | None = Query(None), email: str | None = Query(None)):
-    user_filter: List[User] = copy(users)
-    if status is not None:
-        if not regex.match(r'^((active)|(inactive))$', status):
+def get_all(active: str | None = Query(None), email: str | None = Query(None)):
+    db = SessionLocal()
+    user_filter = db.query(User)
+    if active is not None:
+        if not regex.match(r'^((true)|(false))$', active):
             return JSONResponse({
                 "status": 400,
-                "message": f"Not recognized value '{status}'"
+                "message": f"Not recognized value '{active}'"
             }, 400)
-        user_filter = [elem for elem in user_filter if elem['status'] == status]
+        user_filter = user_filter.filter(User.active == (active=="true") )
     if email is not None:
         if not regex.match(r'^[a-z0-9!&\-#.~]+@[a-z0-9]+\.(([a-z0-9]+\.)+)?[a-z0-9]+$', email):
             return JSONResponse({
@@ -37,92 +59,61 @@ def get_all(status: str | None = Query(None), email: str | None = Query(None)):
                 "input": email,
                 "message": f"Email format is not valid"
             }, 400)
-        user_filter = [elem for elem in user_filter if elem['email'] == email]
+        user_filter = user_filter.filter(User.email == email)
 
-    return JSONResponse(user_filter, 200)
+    return JSONResponse(jsonable_encoder(user_filter.all()), 200)
 
 @router.get('/{id}', description="Get the info from a single user using the id")
 def get_by_id(id: str = Path()):
-    user: User | None = None
-    if len(users) == 0:
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == id).first()
+    if user is None:
         return JSONResponse({
             "status": 404,
             "message": "User not found"
         }, 404)
-    for u in users:
-        if u['id'] == id:
-            user = u
-            break
-    if user == None:
-        return JSONResponse({
-            "status": 404,
-            "message": "User not found"
-        }, 404)
-    return JSONResponse(user, 200)
-
-@router.get('/by_email/{email}', description="Get the info from a single user using the email")
-def get_by_id(email: str = Path()):
-    if not regex.match(r'^[a-z0-9!&\-#.~]+@[a-z0-9]+\.(([a-z0-9]+\.)+)?[a-z0-9]+$',email):
-        return JSONResponse({
-            "status": 400,
-            "message": f"'{email}' is not a valid email"
-        }, 404)
-    user: User | None = None
-    if len(users) == 0:
-        return JSONResponse({
-            "status": 404,
-            "message": "User not found"
-        }, 404)
-    for u in users:
-        if u['email'] == email:
-            user = u
-            break
-    if user == None:
-        return JSONResponse({
-            "status": 404,
-            "message": "User not found"
-        }, 404)
-    return JSONResponse(user, 200)
+    return JSONResponse(jsonable_encoder(user), 200)
 
 @router.put('/{id}', description="Update a user")
-def update(id: str = Path(), payload: User = Body()):
-    user: User | None = None
-    if len(users) == 0:
-        return JSONResponse({
-            "status": 404,
-            "message": "User does not exist"
-        }, 404)
-    for u in users:
-        if u['id'] == id:
-            payload = payload.model_dump()
-            u["email"] = payload["email"]
-            u["name"] = payload["name"]
-            u["lastname"] = payload["lastname"]
-            u["status"] = payload["status"]
-            user = u
-            break
+def update(id: str = Path(), payload: UserSchema = Body()):
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == id).first()
     if user == None:
         return JSONResponse({
             "status": 404,
-            "message": "User does not exist"
+            "message": "User not found"
         }, 404)
+    old = db.query(User).filter(User.email == payload.email).first()
+    if old is not None and old.id != user.id:
+        return JSONResponse({
+            "status": 400,
+            "message": "Email already used"
+        }, 400)
+    user.email = payload.email
+    user.name = payload.name
+    user.lastname = payload.lastname
+    user.active = payload.active
+    db.commit()
+    db.refresh(user)
     return JSONResponse({
         "status": 200,
         "message": "User updated",
-        "user": user
+        "user": jsonable_encoder(user)
     }, 200)
 
 @router.delete('/{id}', description="Remove an existent user")
 def delete(id: str = Path()):
-    for u in users:
-        if u["id"] == id:
-            users.remove(u)
-            return JSONResponse({
-                "status": 200,
-                "message": "User deleted",
-                "user": u
-            }, 200)
+    db = SessionLocal()
+    user = db.query(User).filter(User.id == id).first()
+    if user == None:
+        return JSONResponse({
+            "status": 404,
+            "message": "User not found"
+        }, 404)
+    db.delete(user)
+    db.commit()
     return JSONResponse({
-        "status": 404,
-        "message": "User does not exist",
-    }, 404)
+        "status": 200,
+        "message": "User deleted",
+        "user": jsonable_encoder(user)
+    }, 200)

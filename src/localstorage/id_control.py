@@ -1,1 +1,0 @@
-idCategory = 0
