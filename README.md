@@ -6,7 +6,7 @@ Se propone una aplicacion para llevar el control de ingresos y egresos de las pe
 
 ## Endpoints
 
-> PREFIJO GLOBAL /api/v1
+> PREFIJO GLOBAL /api/v2
 
 <br>
 
@@ -77,6 +77,8 @@ Reportes
 
 2. Entrar al directorio de trabajo: `mkdir control-gastos`
 
-3. Ejecutar con docker: `docker compose -f docker-compose-dev.yml up`
+3. Crear el `.env` a partir de `.env.example` y establecer las variables.
 
-4. Abre la documentacion en [http://localhost:8000/docs](http://localhost:8000/docs) o [http://localhost:8000/redoc](http://localhost:8000/redoc)
+4. Ejecutar con docker: `docker compose -f docker-compose-dev.yml --env-file .env up`
+
+5. Abre la documentacion en [http://localhost:8000/docs](http://localhost:8000/docs) o [http://localhost:8000/redoc](http://localhost:8000/redoc)

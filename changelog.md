@@ -7,3 +7,7 @@
     - Categories
     - Incomes and expenses
     - Basic and extended reports
+
+- ### v2.0.0
+    - Refactored app
+    - Included database in mysql
