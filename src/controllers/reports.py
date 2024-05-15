@@ -1,107 +1,82 @@
 from copy import copy
 from fastapi import APIRouter, Body, Path, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from ..localstorage.users import users
-from ..localstorage.categories import categories
-from ..localstorage.incomes import incomes
-from ..localstorage.expenses import expenses
+
+from src.config.database import SessionLocal
+from src.models.categories import Category
 
 router = APIRouter(prefix="/users/{id}/reports")
 
 @router.get('/basic', description="Get basic report for the user")
 def get_basic_report(id: str = Path()):
-    user = None
-    for u in users:
-        if u['id'] == id:
-            user = u
-            break
-    if user is None:
-        return JSONResponse({
-            "status": 404,
-            "message": "User not found"
-        }, 404)
-    user_categories = copy(categories)
-    user_income_categories = [elem for elem in user_categories if elem['user'] == id]
-    user_income_categories = [elem for elem in user_income_categories if elem['type'] == 'income']
-    user_expense_categories = [elem for elem in user_categories if elem['user'] == id]
-    user_expense_categories = [elem for elem in user_expense_categories if elem['type'] == 'expense']
-    user_incomes = []
-    user_expenses = []
-    total_incomes = 0.0
-    total_expenses = 0.0
-    for e in user_income_categories:
-        user_incomes_temp = [i for i in incomes if e["id"] == i['category']]
-        for l in user_incomes_temp:
-            user_incomes.append(l)
-    for e in user_expense_categories:
-        user_expenses_temp = [i for i in expenses if e["id"] == i['category']]
-        for l in user_expenses_temp:
-            user_expenses.append(l)
-    for i in user_incomes:
-        total_incomes += i['amount']
-    for i in user_expenses:
-        total_expenses += i['amount']
+    db = SessionLocal()
+    incomes = db.query(Category).filter(Category.user_id == id).filter(Category.type == "income")
+    expenses = db.query(Category).filter(Category.user_id == id).filter(Category.type == "expense")
+    income_amount = 0.0
+    expense_amount = 0.0
+    total_incomes = 0
+    total_expenses = 0
+    for i in incomes:
+        income_amount += len(i.incomes)
+        for j in i.incomes:
+            total_incomes += j.amount
+    for e in expenses:
+        expense_amount += len(e.expenses)
+        for j in e.expenses:
+            total_expenses += j.amount
     return JSONResponse({
         "status": 200,
         "message": "Basic report",
         "data": {
             "incomes": {
-                "amount": len(user_incomes),
+                "amount": income_amount,
                 "total": total_incomes
             },
             "expenses": {
-                "amount": len(user_expenses),
+                "amount": expense_amount,
                 "total": total_expenses
             },
             "current_balance": total_incomes - total_expenses
         }
     }, 200)
 
-@router.get('/extended', description="Get detailed report for the user")
+@router.get('/detailed', description="Get detailed report for the user")
 def get_extended_report(id: str = Path()):
-    user = None
-    for u in users:
-        if u['id'] == id:
-            user = u
-            break
-    if user is None:
-        return JSONResponse({
-            "status": 404,
-            "message": "User not found"
-        }, 404)
-    user_categories = copy(categories)
-    user_income_categories = [elem for elem in user_categories if elem['user'] == id]
-    user_income_categories = [elem for elem in user_income_categories if elem['type'] == 'income']
-    user_expense_categories = [elem for elem in user_categories if elem['user'] == id]
-    user_expense_categories = [elem for elem in user_expense_categories if elem['type'] == 'expense']
+    user_income_categories = []
+    user_expense_categories = []
+    db = SessionLocal()
+    incomes = db.query(Category).filter(Category.user_id == id).filter(Category.type == "income")
+    expenses = db.query(Category).filter(Category.user_id == id).filter(Category.type == "expense")
 
-    user_income_categories_temp = []
-    user_expense_categories_temp = []
-    for e in user_income_categories:
-        user_incomes_temp = [i for i in incomes if e["id"] == i['category']]
-        etemp = copy(e)
-        etemp['total'] = 0.0
-        etemp['incomes'] = []
-        for l in user_incomes_temp:
-            etemp['total'] += l['amount']
-            if not isinstance(l['date'], str):
-                l['date'] = l['date'].isoformat()
-            etemp['incomes'].append(l)
-        user_income_categories_temp.append(etemp)
-    user_income_categories = user_income_categories_temp
-    for e in user_expense_categories:
-        user_expenses_temp = [i for i in expenses if e["id"] == i['category']]
-        etemp = copy(e)
-        etemp['total'] = 0.0
-        etemp['expenses'] = []
-        for l in user_expenses_temp:
-            etemp['total'] += l['amount']
-            if not isinstance(l['date'], str):
-                l['date'] = l['date'].isoformat()
-            etemp['expenses'].append(l)
-        user_expense_categories_temp.append(etemp)
-    user_expense_categories = user_expense_categories_temp
-
+    for i in incomes:
+        cat = {
+            "name": i.name,
+            "total": 0.0,
+            "incomes": []
+        }
+        for j in i.incomes:
+            cat["total"] += j.amount
+            cat["incomes"].append({
+                "description": j.description,
+                "amount": j.amount,
+                "date": jsonable_encoder(j.date)
+            })
+        user_income_categories.append(cat)
+    for i in expenses:
+        cat = {
+            "name": i.name,
+            "total": 0.0,
+            "expenses": []
+        }
+        for j in i.expenses:
+            cat["total"] += j.amount
+            cat["expenses"].append({
+                "description": j.description,
+                "amount": j.amount,
+                "date": jsonable_encoder(j.date)
+            })
+        user_expense_categories.append(cat)
     return JSONResponse({
         "status": 200,
         "message": "Detailed report",
